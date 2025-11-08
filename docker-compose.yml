@@ -1,0 +1,41 @@
+services:
+  gateway:
+    build: ./gateway
+    ports:
+      - "8001:8000"
+  
+  nlp-qa:
+    build: ./nlp-qa
+  
+  vision:
+    build: ./vision
+  
+  climate:
+    build: ./climate
+  
+  safety:
+    build: ./safety
+  
+  user:
+    build: ./user
+  
+  dashboard:
+    build: ./dashboard
+  
+  federated:
+    build: ./federated
+  
+  whatsapp-bot:
+    build: ./whatsapp-bot
+    ports:
+      - "8002:8000"
+  
+  mongo:
+    image: mongo:latest
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+
+volumes:
+  mongo-data:

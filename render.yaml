@@ -1,0 +1,41 @@
+services:
+  - type: web
+    name: ai-guardian-gateway
+    env: docker
+    dockerfilePath: ./gateway/Dockerfile
+    dockerContext: ./gateway
+    
+  - type: web
+    name: ai-guardian-vision
+    env: docker
+    dockerfilePath: ./vision/Dockerfile
+    dockerContext: ./vision
+    
+  - type: web
+    name: ai-guardian-climate
+    env: docker
+    dockerfilePath: ./climate/Dockerfile
+    dockerContext: ./climate
+    
+  - type: web
+    name: ai-guardian-safety
+    env: docker
+    dockerfilePath: ./safety/Dockerfile
+    dockerContext: ./safety
+    
+  - type: web
+    name: ai-guardian-user
+    env: docker
+    dockerfilePath: ./user/Dockerfile
+    dockerContext: ./user
+    
+  - type: web
+    name: ai-guardian-dashboard
+    env: docker
+    dockerfilePath: ./dashboard/Dockerfile
+    dockerContext: ./dashboard
+
+databases:
+  - name: ai-guardian-mongo
+    databaseName: ai_guardian
+    user: admin
