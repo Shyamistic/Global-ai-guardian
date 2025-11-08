@@ -1,11 +1,12 @@
-from fastapi import FastAPI, Request, File, UploadFile, HTTPException
+from fastapi import FastAPI, Request, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
-import httpx
 from datetime import datetime
+import httpx
+import os
 
-app = FastAPI(title="AI Guardian Gateway", version="1.0")
+app = FastAPI(title="AI Guardian Gateway", version="2.0")
 
-# CORS settings for frontend access
+# CORS middleware for frontend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -14,108 +15,110 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Service URLs (update these with your Railway URLs)
 BASE_URLS = {
-    "nlp": "http://nlp-qa:8000",
-    "vision": "http://vision:8000",
-    "climate": "http://climate:8000",
-    "safety": "http://safety:8000",
-    "user": "http://user:8000",
-    "dashboard": "http://dashboard:8000",
+    "nlp": os.getenv("NLP_SERVICE_URL", "http://nlp-qa:8000"),
+    "vision": os.getenv("VISION_SERVICE_URL", "http://vision:8000"),
+    "climate": os.getenv("CLIMATE_SERVICE_URL", "http://climate:8000"),
+    "safety": os.getenv("SAFETY_SERVICE_URL", "http://safety:8000"),
+    "user": os.getenv("USER_SERVICE_URL", "http://user:8000"),
+    "dashboard": os.getenv("DASHBOARD_SERVICE_URL", "http://dashboard:8000"),
 }
 
 @app.get("/")
-async def root():
+def root():
     return {
         "status": "ok, AI Guardian Gateway",
-        "version": "1.0",
+        "version": "2.0",
         "timestamp": datetime.utcnow().isoformat(),
         "services": list(BASE_URLS.keys())
     }
 
 @app.get("/health")
 async def health_check():
+    """Check health of all services"""
     health_status = {}
+    
     async with httpx.AsyncClient(timeout=5.0) as client:
-        for service, url in BASE_URLS.items():
+        for service_name, base_url in BASE_URLS.items():
             try:
-                resp = await client.get(f"{url}/health")
-                resp.raise_for_status()
-                health_status[service] = resp.json()
-            except Exception as e:
-                health_status[service] = {"status": "unavailable", "error": str(e)}
-    return health_status
+                response = await client.get(f"{base_url}/health")
+                health_status[service_name] = {
+                    "status": "healthy" if response.status_code == 200 else "unhealthy",
+                    "response_time_ms": response.elapsed.total_seconds() * 1000
+                }
+            except:
+                health_status[service_name] = {
+                    "status": "unreachable",
+                    "response_time_ms": None
+                }
+    
+    return {
+        "gateway": "healthy",
+        "services": health_status,
+        "timestamp": datetime.utcnow().isoformat()
+    }
 
-# NLP/QA Route
-@app.post("/ask")
-async def ask(request: Request):
-    payload = await request.json()
-    async with httpx.AsyncClient() as client:
-        try:
-            resp = await client.post(f"{BASE_URLS['nlp']}/ask", json=payload)
-            resp.raise_for_status()
-            return resp.json()
-        except Exception as e:
-            raise HTTPException(status_code=502, detail=f"NLP service error: {str(e)}")
-
-# Vision Route
-@app.post("/detect_disease")
+# Vision Service Routes
+@app.post("/vision/detect")
 async def detect_disease(file: UploadFile = File(...)):
-    async with httpx.AsyncClient() as client:
-        try:
-            files = {"file": (file.filename, await file.read(), file.content_type)}
-            resp = await client.post(f"{BASE_URLS['vision']}/detect", files=files)
-            resp.raise_for_status()
-            return resp.json()
-        except Exception as e:
-            raise HTTPException(status_code=502, detail=f"Vision service error: {str(e)}")
+    """Forward disease detection to vision service"""
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        files = {"file": (file.filename, await file.read(), file.content_type)}
+        response = await client.post(f"{BASE_URLS['vision']}/detect", files=files)
+        return response.json()
 
-# Climate Route
-@app.post("/climate/alert")
-async def climate_alert(request: Request):
-    payload = await request.json()
-    async with httpx.AsyncClient() as client:
-        try:
-            resp = await client.post(f"{BASE_URLS['climate']}/alert", json=payload)
-            resp.raise_for_status()
-            return resp.json()
-        except Exception as e:
-            raise HTTPException(status_code=502, detail=f"Climate service error: {str(e)}")
+@app.get("/vision/diseases")
+async def list_diseases():
+    """List all detectable diseases"""
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        response = await client.get(f"{BASE_URLS['vision']}/diseases")
+        return response.json()
 
-# Safety Route
-@app.post("/safety/report")
-async def report_scam(request: Request):
-    payload = await request.json()
-    async with httpx.AsyncClient() as client:
-        try:
-            resp = await client.post(f"{BASE_URLS['safety']}/report_scam", json=payload)
-            resp.raise_for_status()
-            return resp.json()
-        except Exception as e:
-            raise HTTPException(status_code=502, detail=f"Safety service error: {str(e)}")
+# Climate Service Routes
+@app.get("/climate/weather")
+async def get_weather(location: str):
+    """Get weather data"""
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        response = await client.get(f"{BASE_URLS['climate']}/weather", params={"location": location})
+        return response.json()
 
-# User Register Route
+@app.get("/climate/alert")
+async def get_climate_alert(location: str):
+    """Get climate alerts"""
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        response = await client.get(f"{BASE_URLS['climate']}/alert", params={"location": location})
+        return response.json()
+
+# Safety Service Routes
+@app.post("/safety/check")
+async def check_safety(request: Request):
+    """Check for scams and phishing"""
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        data = await request.json()
+        response = await client.post(f"{BASE_URLS['safety']}/check", json=data)
+        return response.json()
+
+# User Service Routes
 @app.post("/user/register")
 async def register_user(request: Request):
-    payload = await request.json()
-    async with httpx.AsyncClient() as client:
-        try:
-            resp = await client.post(f"{BASE_URLS['user']}/register", json=payload)
-            resp.raise_for_status()
-            return resp.json()
-        except Exception as e:
-            raise HTTPException(status_code=502, detail=f"User register error: {str(e)}")
+    """Register new user"""
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        data = await request.json()
+        response = await client.post(f"{BASE_URLS['user']}/register", json=data)
+        return response.json()
 
-# User Login Route
 @app.post("/user/login")
 async def login_user(request: Request):
-    payload = await request.json()
-    async with httpx.AsyncClient() as client:
-        try:
-            resp = await client.post(f"{BASE_URLS['user']}/login", json=payload)
-            resp.raise_for_status()
-            return resp.json()
-        except Exception as e:
-            raise HTTPException(status_code=502, detail=f"User login error: {str(e)}")
-@app.get("/health")
-def health_check():
-    return {"status": "healthy", "service": "SERVICE_NAME", "timestamp": datetime.utcnow().isoformat()}
+    """User login"""
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        data = await request.json()
+        response = await client.post(f"{BASE_URLS['user']}/login", json=data)
+        return response.json()
+
+@app.get("/user/profile/{email}")
+async def get_user_profile(email: str):
+    """Get user profile"""
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        response = await client.get(f"{BASE_URLS['user']}/profile/{email}")
+        return response.json()
